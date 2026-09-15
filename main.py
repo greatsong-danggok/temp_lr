@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 
@@ -122,4 +121,3 @@ st.header("5. 연도별 평균기온")
 그래프자료 = 연도별평균기온.set_index("연도")
 
 st.line_chart(그래프자료)
-```
