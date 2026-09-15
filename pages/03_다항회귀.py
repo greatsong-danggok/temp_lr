@@ -63,17 +63,14 @@ valid_dates = df["날짜"].dropna()
 
 if len(valid_dates) > 0:
 
-    start_date = valid_dates.min()
-    end_date = valid_dates.max()
-
     col2.metric(
         "기록 시작",
-        start_date.strftime("%Y-%m-%d")
+        valid_dates.min().strftime("%Y-%m-%d")
     )
 
     col3.metric(
         "기록 마지막",
-        end_date.strftime("%Y-%m-%d")
+        valid_dates.max().strftime("%Y-%m-%d")
     )
 
 col4.metric(
@@ -178,19 +175,21 @@ excluded_df = annual_df[
 st.header("4. 분석에 사용할 연도")
 
 st.write(
-    "연평균기온을 계산할 때 "
-    "유효한 평균기온이 350일 이상인 연도만 사용합니다."
+    "유효한 평균기온이 350일 이상인 연도만 "
+    "연평균기온 분석에 사용합니다."
 )
 
 col1, col2 = st.columns(2)
 
 with col1:
+
     st.metric(
         "분석에 사용한 연도",
         f"{len(analysis_df)}개"
     )
 
 with col2:
+
     st.metric(
         "제외된 연도",
         f"{len(excluded_df)}개"
@@ -254,7 +253,7 @@ with col2:
 
 
 # ==================================================
-# 7. 학습용 / 평가용 데이터 준비
+# 7. 데이터 준비
 # ==================================================
 
 X_train_year = train_df[["연도"]].values
@@ -265,17 +264,17 @@ y_test = test_df["연평균기온"].values
 
 
 # ==================================================
-# 8. 연도를 학습용 데이터 기준으로 변환
+# 8. 연도 변환
 # ==================================================
+# 학습용 데이터만 이용하여 기준을 만들고
+# 평가용 데이터에도 같은 기준을 적용합니다.
 
 scaler = StandardScaler()
 
-# 학습용 데이터로 기준을 만들기
 X_train_scaled = scaler.fit_transform(
     X_train_year
 )
 
-# 평가용 데이터에는 같은 기준 적용
 X_test_scaled = scaler.transform(
     X_test_year
 )
@@ -285,25 +284,17 @@ X_test_scaled = scaler.transform(
 # 9. 30차 다항회귀
 # ==================================================
 
-st.header("6. 30차 다항회귀")
-
-st.write(
-    "2004년까지의 학습용 데이터만 이용하여 "
-    "30차 다항회귀 모델을 학습합니다."
-)
+st.header("6. 30차 다항회귀 모델")
 
 poly = PolynomialFeatures(
     degree=30,
     include_bias=False
 )
 
-
-# 학습용 데이터로 30차 기준 만들기
 X_train_poly = poly.fit_transform(
     X_train_scaled
 )
 
-# 평가용 데이터에는 같은 기준 적용
 X_test_poly = poly.transform(
     X_test_scaled
 )
@@ -318,7 +309,7 @@ model.fit(
 
 
 # ==================================================
-# 10. 학습용 / 평가용 예측
+# 10. 예측
 # ==================================================
 
 train_pred = model.predict(
@@ -379,7 +370,6 @@ result_df = pd.DataFrame({
     "2050년 예측값(℃)": [prediction_2050]
 })
 
-
 st.dataframe(
     result_df.style.format({
         "학습용 R²": "{:.4f}",
@@ -421,11 +411,10 @@ with col3:
         f"{r2_difference:.4f}"
     )
 
-
 st.info(
-    "학습용 R²과 평가용 R²의 차이가 크다면 "
-    "모델이 학습 데이터의 특징을 지나치게 따라간 "
-    "과적합 가능성을 생각할 수 있습니다."
+    "학습용 R²과 평가용 R²의 차이가 클수록 "
+    "학습 데이터에 지나치게 맞춰진 과적합 가능성을 "
+    "확인할 수 있습니다."
 )
 
 
@@ -433,22 +422,14 @@ st.info(
 # 15. 그래프용 30차 곡선
 # ==================================================
 #
-# 중요:
-# 2050년까지 곡선을 그리지 않습니다.
+# 2050년까지 그리지 않습니다.
+# 실제 데이터가 있는 마지막 연도까지만 그립니다.
 #
-# 30차 다항식은 학습 범위를 벗어나면
-# 값이 매우 크게 튈 수 있기 때문입니다.
-#
-# 따라서 그래프는 실제 데이터가 존재하는
-# 마지막 연도까지만 표시합니다.
-#
-
 
 graph_years = np.arange(
     analysis_df["연도"].min(),
     analysis_df["연도"].max() + 1
 ).reshape(-1, 1)
-
 
 graph_years_scaled = scaler.transform(
     graph_years
@@ -464,27 +445,113 @@ graph_predictions = model.predict(
 
 
 # ==================================================
-# 16. 그래프
+# 16. 첫 번째 그래프
+#     학습 데이터 + 30차 곡선
 # ==================================================
 
-st.header("9. 학습용·평가용 데이터와 30차 곡선")
+st.header("9. 학습 데이터에 맞춘 30차 함수")
 
-fig = go.Figure()
+st.write(
+    "첫 번째 그래프는 **2004년까지의 학습 데이터만** "
+    "사용하여 30차 함수가 데이터를 얼마나 잘 따라가는지 보여줍니다."
+)
+
+fig_train = go.Figure()
+
+
+# 학습 실제값
+fig_train.add_trace(
+    go.Scatter(
+        x=train_df["연도"],
+        y=train_df["연평균기온"],
+        mode="markers",
+        name="학습용 실제값",
+        marker=dict(size=7),
+        hovertemplate=(
+            "연도: %{x}<br>"
+            "연평균기온: %{y:.2f}℃"
+            "<extra></extra>"
+        )
+    )
+)
+
+
+# 30차 곡선
+# 첫 번째 그래프에서는 학습기간까지만 표시
+train_graph_years = np.arange(
+    analysis_df["연도"].min(),
+    train_df["연도"].max() + 1
+).reshape(-1, 1)
+
+train_graph_scaled = scaler.transform(
+    train_graph_years
+)
+
+train_graph_poly = poly.transform(
+    train_graph_scaled
+)
+
+train_graph_pred = model.predict(
+    train_graph_poly
+)
+
+
+fig_train.add_trace(
+    go.Scatter(
+        x=train_graph_years.flatten(),
+        y=train_graph_pred,
+        mode="lines",
+        name="30차 다항회귀",
+        line=dict(width=3),
+        hovertemplate=(
+            "연도: %{x}<br>"
+            "30차 예측값: %{y:.2f}℃"
+            "<extra></extra>"
+        )
+    )
+)
+
+
+fig_train.update_layout(
+    xaxis_title="연도",
+    yaxis_title="연평균기온 (℃)",
+    height=600,
+    hovermode="x unified",
+    legend_title="표시 항목"
+)
+
+st.plotly_chart(
+    fig_train,
+    use_container_width=True
+)
+
+
+# ==================================================
+# 17. 두 번째 그래프
+#     학습 + 평가 데이터 + 30차 곡선
+# ==================================================
+
+st.header("10. 평가 데이터까지 포함한 30차 함수")
+
+st.write(
+    "두 번째 그래프에서는 학습에 사용하지 않은 "
+    "**2005년 이후 평가 데이터**를 함께 표시합니다."
+)
+
+fig_test = go.Figure()
 
 
 # --------------------------------------------------
 # 학습용 실제값
 # --------------------------------------------------
 
-fig.add_trace(
+fig_test.add_trace(
     go.Scatter(
         x=train_df["연도"],
         y=train_df["연평균기온"],
         mode="markers",
         name="학습용 실제값",
-        marker=dict(
-            size=7
-        ),
+        marker=dict(size=7),
         hovertemplate=(
             "연도: %{x}<br>"
             "연평균기온: %{y:.2f}℃"
@@ -498,15 +565,13 @@ fig.add_trace(
 # 평가용 실제값
 # --------------------------------------------------
 
-fig.add_trace(
+fig_test.add_trace(
     go.Scatter(
         x=test_df["연도"],
         y=test_df["연평균기온"],
         mode="markers",
         name="평가용 실제값",
-        marker=dict(
-            size=7
-        ),
+        marker=dict(size=7),
         hovertemplate=(
             "연도: %{x}<br>"
             "연평균기온: %{y:.2f}℃"
@@ -517,18 +582,16 @@ fig.add_trace(
 
 
 # --------------------------------------------------
-# 30차 다항회귀 곡선
+# 30차 곡선
 # --------------------------------------------------
 
-fig.add_trace(
+fig_test.add_trace(
     go.Scatter(
         x=graph_years.flatten(),
         y=graph_predictions,
         mode="lines",
         name="30차 다항회귀",
-        line=dict(
-            width=3
-        ),
+        line=dict(width=3),
         hovertemplate=(
             "연도: %{x}<br>"
             "30차 예측값: %{y:.2f}℃"
@@ -538,11 +601,8 @@ fig.add_trace(
 )
 
 
-# --------------------------------------------------
-# 학습 / 평가 구간 경계
-# --------------------------------------------------
-
-fig.add_vline(
+# 학습 → 평가 경계
+fig_test.add_vline(
     x=2004.5,
     line_dash="dash",
     annotation_text="학습 → 평가",
@@ -550,76 +610,78 @@ fig.add_vline(
 )
 
 
-# --------------------------------------------------
-# 그래프 설정
-# --------------------------------------------------
-
-fig.update_layout(
+fig_test.update_layout(
     xaxis_title="연도",
     yaxis_title="연평균기온 (℃)",
+    height=600,
     hovermode="x unified",
-    height=650,
     legend_title="표시 항목"
 )
 
-
 st.plotly_chart(
-    fig,
+    fig_test,
     use_container_width=True
 )
 
 
 # ==================================================
-# 17. 2050년 예측값 별도 표시
+# 18. 2050년 예측
 # ==================================================
 
-st.header("10. 2050년 예측")
+st.header("11. 2050년 예측")
 
 st.metric(
-    "30차 다항회귀의 2050년 예측 연평균기온",
+    "30차 다항회귀의 2050년 예측",
     f"{prediction_2050:.2f} ℃"
 )
 
 st.warning(
-    "2050년은 현재 데이터의 마지막 연도 이후이므로 "
-    "그래프에는 2050년까지 곡선을 연장하지 않았습니다. "
-    "2050년 값은 학습된 30차 다항식을 이용한 외삽 결과입니다."
+    "2050년은 실제 데이터가 존재하는 구간 밖이므로 "
+    "그래프에는 표시하지 않았습니다. "
+    "2050년 값은 30차 함수를 미래로 연장하여 계산한 외삽값입니다."
 )
 
 
 # ==================================================
-# 18. 해석
+# 19. 최종 해석
 # ==================================================
 
-st.header("11. 결과 해석")
+st.header("12. 결과 해석")
 
 st.write(
     f"""
-### 학습용 데이터
+### 학습 데이터
 
-학습용 데이터의 R²은 **{train_r2:.4f}**입니다.
+30차 다항회귀의 학습용 R²은 **{train_r2:.4f}**입니다.
 
-### 평가용 데이터
+즉, 2004년까지의 학습 데이터에 이 함수가
+얼마나 잘 맞는지를 나타냅니다.
 
-학습에 사용하지 않은 평가용 데이터의 R²은
+### 평가 데이터
+
+2005년 이후 평가용 데이터의 R²은
 **{test_r2:.4f}**입니다.
 
-### 두 R²의 차이
+이 데이터는 모델을 만들 때 사용하지 않았기 때문에,
+새로운 데이터에 대한 모델의 성능을 확인하는 데 사용할 수 있습니다.
 
-학습용 R²과 평가용 R²의 차이는
-**{r2_difference:.4f}**입니다.
+### 과적합
 
-학습용 R²은 매우 높은데 평가용 R²이 상대적으로 낮다면,
-모델이 과거의 학습 데이터를 지나치게 따라간
-**과적합** 가능성을 생각할 수 있습니다.
+학습용 R²은 높은데 평가용 R²이 상대적으로 낮다면,
+30차 함수가 학습 데이터의 특징을 지나치게 따라간
+**과적합**이 발생했을 가능성이 있습니다.
+
+두 그래프를 비교하면
+학습 데이터에 맞춰진 복잡한 함수가
+평가 데이터에서도 잘 작동하는지를 직접 확인할 수 있습니다.
 
 ### 2050년
 
-30차 다항회귀가 계산한 2050년 예측값은
+30차 함수의 2050년 예측값은
 **{prediction_2050:.2f}℃**입니다.
 
 이 값은 실제 2050년의 기온을 의미하는 것이 아니라,
-과거 자료를 이용해 만든 30차 함수를
-2050년까지 바깥쪽으로 연장해서 얻은 **외삽값**입니다.
+과거 데이터를 이용해 만든 30차 함수를
+2050년까지 연장하여 계산한 외삽값입니다.
 """
 )
