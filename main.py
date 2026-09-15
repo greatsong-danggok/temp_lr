@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 
@@ -237,4 +236,3 @@ st.info(
     "※ 연도별 평균기온은 평균기온 자료가 존재하는 날짜만 사용하여 계산했으며, "
     "유효 날짜가 350일 이상인 연도만 최종 분석에 포함했습니다."
 )
-```
