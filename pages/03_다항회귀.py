@@ -281,13 +281,13 @@ X_test_scaled = scaler.transform(
 
 
 # ==================================================
-# 9. 30차 다항회귀
+# 9. 차 다항회귀
 # ==================================================
 
-st.header("6. 30차 다항회귀 모델")
+st.header("6. 50차 다항회귀 모델")
 
 poly = PolynomialFeatures(
-    degree=30,
+    degree=50,
     include_bias=False
 )
 
